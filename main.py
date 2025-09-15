@@ -34,9 +34,10 @@ app = FastAPI(
 
 @app.post("/flights", response_model=FlightRead, status_code=201)
 def create_flight(flight: FlightCreate):
-    flight_read = FlightRead(**flight.model_dump())  # generates id automatically
-    flights[flight_read.id] = flight_read
-    return flight_read
+    if flight.id in flights:
+        raise HTTPException(status_code=400, detail="Flight with this ID already exists")
+    flights[flight.id] = FlightRead(**flight.model_dump())
+    return flights[flight.id]
 
 
 @app.get("/flights", response_model=List[FlightRead])

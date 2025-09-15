@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 
 
 class FlightBase(BaseModel):
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Persistent Address ID (server-generated).",
+        json_schema_extra={"example": "550e8400-e29b-41d4-a716-446655440000"},
+    )
     flightNumber: str = Field(
         ...,
         description="Number of the flight.",
@@ -42,6 +47,7 @@ class FlightBase(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
                     "flightNumber": "UA1250",
                     "boardingTime": "7:00AM",
                     "departureTime": "7:32AM",
@@ -60,6 +66,7 @@ class FlightCreate(FlightBase):
         "json_schema_extra": {
             "examples": [
                 {
+                    "id": "11111111-1111-4111-8111-111111111111",
                     "flightNumber": "UA1234",
                     "boardingTime": "3:15PM",
                     "departureTime": "3:45PM",
