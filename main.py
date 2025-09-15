@@ -11,160 +11,145 @@ from fastapi import FastAPI, HTTPException
 from fastapi import Query, Path
 from typing import Optional
 
-from models.person import PersonCreate, PersonRead, PersonUpdate
-from models.address import AddressCreate, AddressRead, AddressUpdate
-from models.health import Health
+from models.passenger import PassengerCreate, PassengerRead, PassengerUpdate
+from models.flight import FlightCreate, FlightRead, FlightUpdate
 
 port = int(os.environ.get("FASTAPIPORT", 8000))
 
 # -----------------------------------------------------------------------------
 # Fake in-memory "databases"
 # -----------------------------------------------------------------------------
-persons: Dict[UUID, PersonRead] = {}
-addresses: Dict[UUID, AddressRead] = {}
+passengers: Dict[UUID, PassengerRead] = {}
+flights: Dict[UUID, FlightRead] = {}
 
 app = FastAPI(
-    title="Person/Address API",
-    description="Demo FastAPI app using Pydantic v2 models for Person and Address",
+    title="Passenger/Flight API",
+    description="Demo FastAPI app using Pydantic v2 models for Passenger and Flight",
     version="0.1.0",
 )
 
 # -----------------------------------------------------------------------------
-# Address endpoints
+# Flight endpoints
 # -----------------------------------------------------------------------------
 
-def make_health(echo: Optional[str], path_echo: Optional[str]=None) -> Health:
-    return Health(
-        status=200,
-        status_message="OK",
-        timestamp=datetime.utcnow().isoformat() + "Z",
-        ip_address=socket.gethostbyname(socket.gethostname()),
-        echo=echo,
-        path_echo=path_echo
-    )
+@app.post("/flights", response_model=FlightRead, status_code=201)
+def create_flight(flight: FlightCreate):
+    flight_read = FlightRead(**flight.model_dump())  # generates id automatically
+    flights[flight_read.id] = flight_read
+    return flight_read
 
-@app.get("/health", response_model=Health)
-def get_health_no_path(echo: str | None = Query(None, description="Optional echo string")):
-    # Works because path_echo is optional in the model
-    return make_health(echo=echo, path_echo=None)
 
-@app.get("/health/{path_echo}", response_model=Health)
-def get_health_with_path(
-    path_echo: str = Path(..., description="Required echo in the URL path"),
-    echo: str | None = Query(None, description="Optional echo string"),
+@app.get("/flights", response_model=List[FlightRead])
+def list_flights(
+    flightNumber: Optional[str] = Query(None, description="Filter by flight number"),
+    boardingTime: Optional[str] = Query(None, description="Filter by boarding time"),
+    departureTime: Optional[str] = Query(None, description="Filter by departure time"),
+    arrivalTime: Optional[str] = Query(None, description="Filter by arrival time"),
+    departureAirport: Optional[str] = Query(None, description="Filter by departure airport"),
+    arrivalAirport: Optional[str] = Query(None, description="Filter by arrival airport"),
 ):
-    return make_health(echo=echo, path_echo=path_echo)
+    results = list(flights.values())
 
-@app.post("/addresses", response_model=AddressRead, status_code=201)
-def create_address(address: AddressCreate):
-    if address.id in addresses:
-        raise HTTPException(status_code=400, detail="Address with this ID already exists")
-    addresses[address.id] = AddressRead(**address.model_dump())
-    return addresses[address.id]
+    if flightNumber is not None:
+        results = [a for a in results if a.flightNumber == flightNumber]
+    if boardingTime is not None:
+        results = [a for a in results if a.boardingTime == boardingTime]
+    if departureTime is not None:
+        results = [a for a in results if a.departureTime == departureTime]
+    if arrivalTime is not None:
+        results = [a for a in results if a.arrivalTime == arrivalTime]
+    if departureAirport is not None:
+        results = [a for a in results if a.departureAirport == departureAirport]
+    if arrivalAirport is not None:
+        results = [a for a in results if a.arrivalAirport == arrivalAirport]
 
-@app.get("/addresses", response_model=List[AddressRead])
-def list_addresses(
-    street: Optional[str] = Query(None, description="Filter by street"),
-    city: Optional[str] = Query(None, description="Filter by city"),
-    state: Optional[str] = Query(None, description="Filter by state/region"),
-    postal_code: Optional[str] = Query(None, description="Filter by postal code"),
-    country: Optional[str] = Query(None, description="Filter by country"),
-):
-    results = list(addresses.values())
-
-    if street is not None:
-        results = [a for a in results if a.street == street]
-    if city is not None:
-        results = [a for a in results if a.city == city]
-    if state is not None:
-        results = [a for a in results if a.state == state]
-    if postal_code is not None:
-        results = [a for a in results if a.postal_code == postal_code]
-    if country is not None:
-        results = [a for a in results if a.country == country]
 
     return results
 
-@app.get("/addresses/{address_id}", response_model=AddressRead)
-def get_address(address_id: UUID):
-    if address_id not in addresses:
-        raise HTTPException(status_code=404, detail="Address not found")
-    return addresses[address_id]
+@app.get("/flights/{flight_id}", response_model=FlightRead)
+def get_flight(flight_id: UUID):
+    if flight_id not in flights:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    return flights[flight_id]
 
-@app.patch("/addresses/{address_id}", response_model=AddressRead)
-def update_address(address_id: UUID, update: AddressUpdate):
-    if address_id not in addresses:
-        raise HTTPException(status_code=404, detail="Address not found")
-    stored = addresses[address_id].model_dump()
+@app.patch("/flights/{flight_id}", response_model=FlightRead)
+def update_flight(flight_id: UUID, update: FlightUpdate):
+    if flight_id not in flights:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    stored = flights[flight_id].model_dump()
     stored.update(update.model_dump(exclude_unset=True))
-    addresses[address_id] = AddressRead(**stored)
-    return addresses[address_id]
+    flights[flight_id] = FlightRead(**stored)
+    return flights[flight_id]
+
+@app.delete("/flights/{flight_id}", status_code=204)
+def delete_flight(flight_id: UUID):
+    if flight_id not in flights:
+        raise HTTPException(status_code=404, detail="Flight not found")
+    del flights[flight_id]
+    return None
 
 # -----------------------------------------------------------------------------
-# Person endpoints
+# Passenger endpoints
 # -----------------------------------------------------------------------------
-@app.post("/persons", response_model=PersonRead, status_code=201)
-def create_person(person: PersonCreate):
-    # Each person gets its own UUID; stored as PersonRead
-    person_read = PersonRead(**person.model_dump())
-    persons[person_read.id] = person_read
-    return person_read
+@app.post("/passengers", response_model=PassengerRead, status_code=201)
+def create_passenger(passenger: PassengerCreate):
+    # Each passenger gets its own UUID; stored as PassengerRead
+    passenger_read = PassengerRead(**passenger.model_dump())
+    passengers[passenger_read.id] = passenger_read
+    return passenger_read
 
-@app.get("/persons", response_model=List[PersonRead])
-def list_persons(
-    uni: Optional[str] = Query(None, description="Filter by Columbia UNI"),
-    first_name: Optional[str] = Query(None, description="Filter by first name"),
-    last_name: Optional[str] = Query(None, description="Filter by last name"),
+@app.get("/passengers", response_model=List[PassengerRead])
+def list_passengers(
+    firstName: Optional[str] = Query(None, description="Filter by first name"),
+    lastName: Optional[str] = Query(None, description="Filter by last name"),
     email: Optional[str] = Query(None, description="Filter by email"),
     phone: Optional[str] = Query(None, description="Filter by phone number"),
-    birth_date: Optional[str] = Query(None, description="Filter by date of birth (YYYY-MM-DD)"),
-    city: Optional[str] = Query(None, description="Filter by city of at least one address"),
-    country: Optional[str] = Query(None, description="Filter by country of at least one address"),
+    birthDate: Optional[str] = Query(None, description="Filter by date of birth (YYYY-MM-DD)"),
 ):
-    results = list(persons.values())
+    results = list(passengers.values())
 
-    if uni is not None:
-        results = [p for p in results if p.uni == uni]
-    if first_name is not None:
-        results = [p for p in results if p.first_name == first_name]
-    if last_name is not None:
-        results = [p for p in results if p.last_name == last_name]
+    if firstName is not None:
+        results = [p for p in results if p.firstName == firstName]
+    if lastName is not None:
+        results = [p for p in results if p.lastName == lastName]
     if email is not None:
         results = [p for p in results if p.email == email]
     if phone is not None:
         results = [p for p in results if p.phone == phone]
-    if birth_date is not None:
-        results = [p for p in results if str(p.birth_date) == birth_date]
-
-    # nested address filtering
-    if city is not None:
-        results = [p for p in results if any(addr.city == city for addr in p.addresses)]
-    if country is not None:
-        results = [p for p in results if any(addr.country == country for addr in p.addresses)]
+    if birthDate is not None:
+        results = [p for p in results if str(p.birthDate) == birthDate]
 
     return results
 
-@app.get("/persons/{person_id}", response_model=PersonRead)
-def get_person(person_id: UUID):
-    if person_id not in persons:
-        raise HTTPException(status_code=404, detail="Person not found")
-    return persons[person_id]
+@app.get("/passengers/{passenger_id}", response_model=PassengerRead)
+def get_passenger(passenger_id: UUID):
+    if passenger_id not in passengers:
+        raise HTTPException(status_code=404, detail="{passenger_id} not found")
+    return passengers[passenger_id]
 
-@app.patch("/persons/{person_id}", response_model=PersonRead)
-def update_person(person_id: UUID, update: PersonUpdate):
-    if person_id not in persons:
-        raise HTTPException(status_code=404, detail="Person not found")
-    stored = persons[person_id].model_dump()
+@app.patch("/passengers/{passenger_id}", response_model=PassengerRead)
+def update_passenger(passenger_id: UUID, update: PassengerUpdate):
+    if passenger_id not in passengers:
+        raise HTTPException(status_code=404, detail="Passenger not found")
+    stored = passengers[passenger_id].model_dump()
     stored.update(update.model_dump(exclude_unset=True))
-    persons[person_id] = PersonRead(**stored)
-    return persons[person_id]
+    passengers[passenger_id] = PassengerRead(**stored)
+    return passengers[passenger_id]
+
+@app.delete("/passengers/{passenger_id}", status_code=204)
+def delete_passenger(passenger_id: UUID):
+    if passenger_id not in passengers:
+        raise HTTPException(status_code=404, detail="Passenger not found")
+    del passengers[passenger_id]
+    return None
+
 
 # -----------------------------------------------------------------------------
 # Root
 # -----------------------------------------------------------------------------
 @app.get("/")
 def root():
-    return {"message": "Welcome to the Person/Address API. See /docs for OpenAPI UI."}
+    return {"message": "Welcome to the Passenger/Flight API. See /docs for OpenAPI UI."}
 
 # -----------------------------------------------------------------------------
 # Entrypoint for `python main.py`
